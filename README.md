@@ -82,7 +82,7 @@ fonttools) and links the skill into `~/.claude/skills/video-edit`.
 - **Settings** (`config.json`) are the numbers and switches the scripts use:
   - pause length, fillers, the lead-in before the first word, the tail;
   - headline and caption size, captions on or off, notes on or off;
-  - loudness, HDR conversion, the font.
+  - loudness, HDR conversion, the font, the privacy blur strength.
 
   When you switch a rule off in your profile, Claude flips the matching
   setting for you.

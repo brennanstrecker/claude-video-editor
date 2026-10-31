@@ -157,9 +157,13 @@ for (const k of plan.keep) {
   // Whisper's word times drift around long pauses, so the words a range
   // captions can differ from the sound it keeps. "capFrom" and "capTo" in the
   // plan set the captioned words apart from the cut (a cut sentence's first
-  // word, timed 0.8 s early, would otherwise be captioned).
+  // word, timed 0.8 s early, would otherwise be captioned). Rule 32: a range
+  // that starts in a pause captions from the pause's start, because Whisper
+  // often times the first word early, inside the pause, and the caption
+  // lost it ("What my app does" captioned "my app does").
+  const before = silences(k.clip).find(([a, b]) => a <= k.from && (b ?? clip.duration) >= k.from);
   const words = data('tx', k.clip).segments.flatMap((s) => s.words)
-    .filter((w) => w.s >= (k.capFrom ?? k.from) - 0.02 && w.s < (k.capTo ?? k.to))
+    .filter((w) => w.s >= (k.capFrom ?? (before ? before[0] : k.from)) - 0.02 && w.s < (k.capTo ?? k.to))
     .map((w) => ({ ...w }));
   // A kept range starts a sentence in the finished video ("So yeah, if
   // you're" becomes "If you're"), so its first word gets a capital.
@@ -386,7 +390,12 @@ function headSize(text) {
   const m = measure(text);
   const fit = (HEAD.fill * W * m.cellUnits) / Math.max(...m.lines);
   const byCap = (pct) => (pct * W * m.cellUnits) / m.capUnits;
-  const size = Math.round(Math.min(fit, byCap(HEAD.capMax)));
+  // Rule 26: when the first scene's captions sit just under the headline
+  // (rule 31), the headline also ends above them: each line takes about 1.2
+  // times its size, and a gap of 0.012 of the frame is left.
+  const capsTop = C.captions.on && pieces[0].capTop < 0.4 ? pieces[0].capTop - 0.012 : 1;
+  const byRoom = ((capsTop - HEADLINE_Y) * H) / (text.split('\n').length * 1.2);
+  const size = Math.round(Math.min(fit, byCap(HEAD.capMax), byRoom));
   const capPct = (m.capUnits * size) / m.cellUnits / W;
   if (capPct < HEAD.capMin) console.warn(`"${text}" is too long for rule 26 (capitals ${(capPct * 100).toFixed(1)}% of width): reword it or split the line`);
   return { size, capPct };
@@ -448,14 +457,22 @@ const picture = Object.fromEntries([...new Set(pieces.map((p) => p.clip))].map((
 pieces.forEach((p, i) => {
   const dur = p.frames / FPS;
   const out = join(piecesDir, `${String(i).padStart(3, '0')}.mkv`);
+  // Rule 37: a part of a filmed screen that fails the privacy check is
+  // blurred for the seconds it shows ("blurs" in the plan: clip times, and
+  // x, y, w, h as parts of the output frame).
+  const blur = (plan.blurs || []).filter((b) => b.clip === p.clip && b.from < p.out && b.to > p.in).map((b, n) => {
+    const [x, y, w, h] = [b.x * W, b.y * H, b.w * W, b.h * H].map(Math.round);
+    return `,split=2[m${n}][b${n}];[b${n}]crop=${w}:${h}:${x}:${y},boxblur=${C.blur.radius}:${C.blur.power}[bl${n}];` +
+      `[m${n}][bl${n}]overlay=${x}:${y}:enable='between(t,${(b.from - p.in).toFixed(3)},${(b.to - p.in).toFixed(3)})'`;
+  }).join('');
   ff(['-ss', p.in.toFixed(4), '-i', fileUrl(picture[p.clip]), '-ss', p.in.toFixed(4), '-i', fileUrl(clipBy[p.clip].file),
     '-t', dur.toFixed(4), '-map', '0:v:0', '-map', '1:a:0',
     // Both streams start at 0 and the picture has exactly p.frames frames. A
     // phone clip's frames can sit half a frame off the cut point; without
     // this the fps filter dropped the first frame, and each such piece pushed
     // the rest of the video about a frame late.
-    '-vf', `setpts=PTS-STARTPTS,fps=${FPS},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,` +
-      'tpad=stop_mode=clone:stop_duration=1',
+    '-vf', `setpts=PTS-STARTPTS,fps=${FPS},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1` +
+      `${blur},tpad=stop_mode=clone:stop_duration=1`,
     '-af', `asetpts=PTS-STARTPTS,aresample=48000,apad,atrim=0:${dur.toFixed(4)},afade=t=in:d=0.03,` +
       `afade=t=out:st=${Math.max(0, dur - 0.03).toFixed(4)}:d=0.03`,
     '-frames:v', String(p.frames),

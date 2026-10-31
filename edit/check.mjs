@@ -74,7 +74,7 @@ if (tl.ending) lines.push(`ending: "${tl.ending.text}" from ${tl.ending.from.toF
 // Captions against the face (rules 30 and 31): under the chin (where it sits
 // nine times in ten at a desk, as build.mjs places them), or above the brows:
 // on the hair, or on the wall above the head. The face box starts at the
-// brows, the forehead takes about 0.08 of the frame above that, hair about 0.22.
+// brows, the forehead takes about 0.06 of the frame above that, hair about 0.22.
 if (tl.captionsOn !== false) {
   for (const clip of [...new Set(tl.pieces.map((p) => p.clip))]) {
     const kept = tl.pieces.filter((p) => p.clip === clip);
@@ -84,7 +84,7 @@ if (tl.captionsOn !== false) {
     const brow = quantile(faces.map((f) => f.top), 0.1);
     const tops = kept.map((p) => p.capTop);
     const lowest = Math.max(...tops) + 0.05;
-    const where = brow && lowest < brow - 0.22 ? 'above the head at' : brow && lowest < brow - 0.08 ? 'over the hair at' : 'from';
+    const where = brow && lowest < brow - 0.22 ? 'above the head at' : brow && lowest < brow - 0.06 ? 'over the hair at' : 'from';
     lines.push(`${clip}: chin ${chin ? (chin * 100).toFixed(1) : '?'}%, captions ${where} ${(Math.min(...tops) * 100).toFixed(1)}%`);
     if (where === 'from' && chin && Math.min(...tops) < chin + 0.01) problems.push(`${clip}: a caption sits on the chin`);
     if (Math.max(...tops) > CONFIG.captions.safeBottom + 0.005) problems.push(`${clip}: a caption is in the platform text area`);

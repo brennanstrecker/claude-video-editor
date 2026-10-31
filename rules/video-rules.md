@@ -145,7 +145,9 @@ rewritten, so the same note never has to be given twice.
 26. **As big as it can be, sized by a rule, not by eye.** The longest line
     fills 80% of the frame width, and its capitals are 6% to 8% of the frame
     width tall. A headline that can't reach 6% at 80% width is too long: it
-    gets reworded or split, never shrunk. `[config: headline.fill, capMin,
+    gets reworded or split, never shrunk. When the first scene's captions
+    sit just under the headline (rule 31), its size is also capped so its
+    lines end above them, with a small gap. `[config: headline.fill, capMin,
     capMax]`
 27. **Top centre, below the apps' top bars.** The capitals start about 14.5%
     down the frame, inside the 3:4 crop the profile grids show (they drop
@@ -189,6 +191,10 @@ rewritten, so the same note never has to be given twice.
     the headline stands apart). One more word is allowed when it finishes a
     sentence. A caption breaks at the end of a sentence and never ends on a
     little word like "my" or "the". Names are spelled from your word list.
+    When a kept range starts inside a pause, its captions start from the
+    beginning of that pause, because the transcript often times the first
+    word early, inside the pause, and the caption would lose it (the plan's
+    `capFrom` overrides this).
     Swearing that stays in the audio is captioned with asterisks, and the
     plan flags it. `[config: captions.maxWords, maxChars, censor]`
 
@@ -237,10 +243,12 @@ rewritten, so the same note never has to be given twice.
 37. **Where overlays come from:**
     - **Product screens:** from a demo or sample account, never real
       customer data. Your profile can limit which screens are ready to show.
-    - **Your own screen recordings:** every frame is checked first for
-      private information (names, emails, messages, client or customer data,
-      anything your profile marks sensitive). A frame that fails is cropped,
-      blurred or not used.
+    - **Your own screen recordings, or a screen you film:** every frame is
+      checked first for private information (names, emails, messages, client
+      or customer data, a folder or file name that identifies something
+      private, anything your profile marks sensitive). The part of the screen
+      that fails is blurred for the seconds it shows (`blurs` in the plan),
+      or the frame is cropped or not used. `[config: blur]`
     - **Web images:** only when they help (a headline you react to, a place,
       a logo you name), with a free licence or as a screenshot of a public
       page you are commenting on. Never a photo of a private person.

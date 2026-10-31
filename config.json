@@ -25,6 +25,7 @@
 
   "loudness": { "lufs": -14, "truePeak": -1.5 },
   "hdrToSdr": true,
+  "blur": { "radius": 28, "power": 4 },
   "font": { "file": "TikTokSans-Bold.ttf", "name": "TikTok Sans 36pt" },
   "phone": { "icloudFolder": "Edited videos" }
 }

@@ -146,6 +146,7 @@ The first ```json block in the plan. Times are seconds in the raw clip.
     { "file": "shots/app-home.png", "clip": "IMG_1234", "at": 42.7, "dur": 2.0, "mode": "card", "top": 0.21 }
   ],
   "screens": [ { "clip": "IMG_1235", "from": 0.5, "to": 38.0 } ],
+  "blurs": [ { "clip": "IMG_1235", "from": 4.0, "to": 9.5, "x": 0.1, "y": 0.42, "w": 0.6, "h": 0.05, "why": "a client's email" } ],
   "captionFixes": { "going to": "gonna" },
   "file": "optional output name"
 }
@@ -162,7 +163,8 @@ The first ```json block in the plan. Times are seconds in the raw clip.
 - `keep`:
   - `from` and `to` sit in silence, or at a checked dip;
   - `capFrom` and `capTo` set which transcript words get captioned when
-    Whisper's times drift past the cut.
+    Whisper's times drift past the cut. A range that starts in a pause
+    already captions from the pause's start.
 - `notes`: on-screen notes (rule 33). Two lines at most, broken with `\n`.
 - `overlays`:
   - `file` is absolute, or relative to the work folder;
@@ -171,6 +173,11 @@ The first ```json block in the plan. Times are seconds in the raw clip.
   - `top` moves a card down.
 - `screens`: ranges where the clip itself shows a screen, so the headline
   steps aside.
+- `blurs`: parts of a filmed screen that fail the privacy check (rule 37).
+  - `from` and `to` are clip times;
+  - `x`, `y`, `w` and `h` are parts of the finished 1080x1920 frame, from the
+    top left;
+  - find the spot on a frame grab of the test render.
 - `captionFixes`: what the captions show instead of what Whisper wrote, so
   they match what was said. `"QR~codes"` keeps two words in one caption.
 
