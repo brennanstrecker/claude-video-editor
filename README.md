@@ -36,7 +36,7 @@ videos with each edit.
 ## Install
 
 ```bash
-git clone <this repo> ~/claude-video-editor
+git clone https://github.com/brennanstrecker/claude-video-editor ~/claude-video-editor
 cd ~/claude-video-editor
 ./setup.sh
 ```
