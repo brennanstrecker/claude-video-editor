@@ -1,0 +1,30 @@
+{
+  "rawFolder": "~/Desktop/Raw content/Videos",
+  "readyFolder": "~/Desktop/Raw content/Ready",
+  "workFolder": "~/Desktop/Raw content/Work",
+
+  "whisper": {
+    "model": "small.en",
+    "checkModel": "small.en",
+    "chunkModel": "base.en",
+    "wordList": ""
+  },
+  "spelling": {},
+
+  "frame": { "width": 1080, "height": 1920, "fps": 30 },
+
+  "pauses": { "on": true, "gap": 0.25, "padIn": 0.04, "padOut": 0.08, "silenceDb": -45 },
+  "leadIn": 0.12,
+  "tail": 0.3,
+  "fillers": { "on": true, "words": ["um", "uh", "erm", "er", "hmm", "mm", "uhm"] },
+  "dropWordless": true,
+
+  "headline": { "on": true, "y": 0.125, "fill": 0.8, "capMin": 0.06, "capMax": 0.08 },
+  "captions": { "on": true, "maxWords": 4, "maxChars": 22, "size": 72, "safeBottom": 0.74, "censor": true },
+  "notes": { "on": true, "fill": 0.86, "capMax": 0.04, "minSeconds": 2.5 },
+
+  "loudness": { "lufs": -14, "truePeak": -1.5 },
+  "hdrToSdr": true,
+  "font": { "file": "TikTokSans-Bold.ttf", "name": "TikTok Sans 36pt" },
+  "phone": { "icloudFolder": "Edited videos" }
+}

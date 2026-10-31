@@ -1,0 +1,17 @@
+# Footage, renders and working files never go into the repo.
+*.mov
+*.MOV
+*.mp4
+*.MP4
+*.m4v
+*.mkv
+*.wav
+*.jpg
+*.png
+work/
+out/
+edits/
+bin/
+.DS_Store
+node_modules/
+__pycache__/
