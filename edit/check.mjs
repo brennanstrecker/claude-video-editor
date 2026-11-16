@@ -45,16 +45,24 @@ lines.push(`length: ${(frames / FPS).toFixed(2)} s picture, ${aSec.toFixed(2)} s
 if (Math.abs(frames / FPS - aSec) > 0.1) problems.push('picture and sound lengths differ by more than 0.1 s');
 // Longer than the plan means pieces slipped late, and the captions with them.
 if (Math.abs(frames / FPS - tl.total) > 0.05) problems.push('the picture runs longer or shorter than the plan: the captions drift');
-lines.push(`loudness: ${lufs} LUFS (target ${target})`);
-if (Math.abs(lufs - target) > 1.5) problems.push(`loudness ${lufs} LUFS is off target`);
+// Rule 51: a screen video is silent (the room is other people), and a sound
+// is added in the app. Every check of speech is skipped below.
+const soundOff = tl.sound === 'off';
+if (soundOff) {
+  lines.push(`sound: off (rule 51), ${lufs} LUFS`);
+  if (lufs > -60) problems.push('the sound should be off (rule 51), but something is audible');
+} else {
+  lines.push(`loudness: ${lufs} LUFS (target ${target})`);
+  if (Math.abs(lufs - target) > 1.5) problems.push(`loudness ${lufs} LUFS is off target`);
+}
 // Rule 44: standard colour. HDR shows washed out or glaring on TikTok and Instagram.
 const vStream = vInfo.match(/Video: .*/)?.[0] ?? '';
 const sdr = /bt709/.test(vStream) && !/arib-std-b67|smpte2084|bt2020/.test(vStream);
 lines.push(`colour: ${sdr ? 'standard (SDR, BT.709)' : vStream.match(/\(([^)]*)\)/)?.[1] ?? 'untagged'}`);
 if (CONFIG.hdrToSdr && !sdr) problems.push('the picture is not tagged standard colour (rule 44)');
 
-lines.push(`first word: ${tl.firstWord?.toFixed(2)} s`);
-if (tl.firstWord > 0.3) problems.push('first word later than 0.3 s (rule 12)');
+if (!soundOff) lines.push(`first word: ${tl.firstWord?.toFixed(2)} s`);
+if (!soundOff && tl.firstWord > 0.3) problems.push('first word later than 0.3 s (rule 12)');
 // Rule 12: the first word is heard whole, after some room tone. build.mjs
 // measures where the voice starts in the raw clip (the finished file's own
 // fade-in would read as silence).
@@ -75,7 +83,7 @@ if (tl.ending) lines.push(`ending: "${tl.ending.text}" from ${tl.ending.from.toF
 // nine times in ten at a desk, as build.mjs places them), or above the brows:
 // on the hair, or on the wall above the head. The face box starts at the
 // brows, the forehead takes about 0.06 of the frame above that, hair about 0.22.
-if (tl.captionsOn !== false) {
+if (tl.captionsOn !== false && !soundOff) {
   for (const clip of [...new Set(tl.pieces.map((p) => p.clip))]) {
     const kept = tl.pieces.filter((p) => p.clip === clip);
     const faces = readJson(join(work, 'face', `${clip}.json`))
@@ -110,9 +118,9 @@ for (let i = 0; i + 2 < words.length; i++) {
   }
 }
 // The longest pause left in, measured on the finished audio (rule 13).
-const sil = ff(['-i', fileUrl(video), '-vn', '-af', `silencedetect=noise=${CONFIG.pauses.silenceDb}dB:d=0.3`, '-f', 'null', '-'], { quiet: false });
+const sil = soundOff ? '' : ff(['-i', fileUrl(video), '-vn', '-af', `silencedetect=noise=${CONFIG.pauses.silenceDb}dB:d=0.3`, '-f', 'null', '-'], { quiet: false });
 const gaps = [...sil.matchAll(/silence_duration: ([\d.]+)/g)].map((g) => +g[1]);
-lines.push(`pauses over 0.3 s left: ${gaps.length}${gaps.length ? ` (longest ${Math.max(...gaps).toFixed(2)} s)` : ''}`);
+if (!soundOff) lines.push(`pauses over 0.3 s left: ${gaps.length}${gaps.length ? ` (longest ${Math.max(...gaps).toFixed(2)} s)` : ''}`);
 if (CONFIG.pauses.on && gaps.some((g) => g > 0.6)) lookAt.push(`a pause of ${Math.max(...gaps).toFixed(2)} s is left in`);
 
 // Captions against what the finished video says. Whisper's word times drift
@@ -146,8 +154,10 @@ const transcribe = (file, model) => {
   const r = spawnSync('python3', whisperArgs(file, model), { maxBuffer: 1 << 26 });
   return r.status === 0 ? JSON.parse(r.stdout).segments.flatMap((s) => s.words) : null;
 };
-const heard = transcribe(video, CONFIG.whisper.checkModel);
-if (heard) {
+const heard = soundOff ? null : transcribe(video, CONFIG.whisper.checkModel);
+if (soundOff) {
+  // Nothing to hear: there are no spoken captions.
+} else if (heard) {
   const diffs = differences(heard);
   lines.push(`captions against the sound: ${diffs.length} difference(s)`);
   for (const d of diffs) lookAt.push(`${d.t.toFixed(1)} s: captions "${d.shown.join(' ')}", heard "${d.said.join(' ')}"`);
@@ -166,7 +176,7 @@ for (const p of tl.pieces) {
 // missed, and only the words starting inside it count.
 const chunkWav = join(work, 'check-chunk.wav');
 const inChunks = [];
-for (const [a, b] of chunks) {
+for (const [a, b] of soundOff ? [] : chunks) {
   const from = Math.max(0, a - 1.5);
   ff(['-ss', String(from), '-to', String(Math.min(tl.total, b + 1.5)), '-i', fileUrl(video), '-vn', '-ac', '1', '-ar', '16000', '-y', chunkWav]);
   inChunks.push(...(transcribe(chunkWav, CONFIG.whisper.chunkModel) ?? []).map((w) => ({ ...w, s: w.s + from }))
@@ -175,7 +185,7 @@ for (const [a, b] of chunks) {
 // Only what the chunks hear that the captions don't show counts: a word
 // missing at a chunk's edge is the chunking, and the whole pass covers it.
 const chunkDiffs = differences(inChunks).filter((d) => d.said.length);
-lines.push(`re-heard in ${chunks.length} chunks: ${chunkDiffs.length} sound(s) the captions don't show`);
+if (!soundOff) lines.push(`re-heard in ${chunks.length} chunks: ${chunkDiffs.length} sound(s) the captions don't show`);
 for (const d of chunkDiffs) lookAt.push(`${d.t.toFixed(1)} s (chunks): captions "${d.shown.join(' ')}", heard "${d.said.join(' ')}"`);
 if (tl.dropped?.length) lines.push(`wordless pieces dropped (no voice in them): ${tl.dropped.length}`);
 for (const p of tl.pieces.filter((q) => q.unworded)) {

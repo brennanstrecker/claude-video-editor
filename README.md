@@ -9,7 +9,10 @@ You drop your raw phone clips in a folder and ask Claude to edit them. It:
 - adds a headline and captions placed under your chin (or above your head if
   you sit close), and notes on screen where a line needs clarifying;
 - converts iPhone HDR to standard colour and levels the sound;
-- checks its own work by transcribing the result again;
+- checks its own work by transcribing the result again, and by hearing every
+  kept sound block on its own;
+- also edits screen videos (a phone filming a laptop, with the sound off):
+  the prompt becomes the hook, and nothing is cut unless you ask;
 - AirDrops the finished video to your phone, and suggests post captions.
 
 It follows your own strategy and style. The first time you use it, it asks

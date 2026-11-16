@@ -89,7 +89,8 @@ a rule disagree, the profile wins.
      inside connected speech. Only cut at a dip near room tone.
    - A repeat one model hears is a real take until proven otherwise.
 3. **Test build:** `node edit/build.mjs <slug> --test`, then `node
-   edit/check.mjs <slug>`.
+   edit/check.mjs <slug>`, then `python3 edit/blocks.py <slug>` (rule 48:
+   every kept sound block heard on its own).
    - Look at `check-frames.png`, `check-cuts.png` and `check-wave.png`.
    - Re-hear every join the check lists with `listen.mjs hear`.
    - Fix the plan and rebuild until the check is clean or every item is
@@ -102,7 +103,10 @@ a rule disagree, the profile wins.
    - `node edit/check.mjs <slug>`, and fix any problem;
    - give them the file.
 5. **Their notes:**
-   - fix them, rebuild, re-check;
+   - change only what they asked (rule 47), and find any moved cut again by
+     ear; put anything else the checks found to them as a proposal;
+   - fix them, rebuild, re-check; keep the earlier version next to the new
+     one;
    - add each note as a numbered lesson (from 101) at the end of
      `rules/video-rules.md`, with the date and the video;
    - rewrite any older rule the lesson contradicts, so no two rules
@@ -152,7 +156,11 @@ The first ```json block in the plan. Times are seconds in the raw clip.
 }
 ```
 
-- `type`: `desk`, `walking`, `day` or the user's own type names.
+- `type`: `desk`, `walking`, `day`, `screen` (rule 51) or the user's own type
+  names.
+- `sound`: `"off"` for a screen video filmed among other people (rule 51):
+  each range is kept whole, nothing is captioned, and the track is silent.
+- `headline.fill`: up to `0.86`, for a long hook kept word for word (rule 51).
 - `headline.show`:
   - `whole` (the default);
   - `first-scene` (the first clip only, at least 3 s);
@@ -165,12 +173,20 @@ The first ```json block in the plan. Times are seconds in the raw clip.
   - `capFrom` and `capTo` set which transcript words get captioned when
     Whisper's times drift past the cut. A range that starts in a pause
     already captions from the pause's start.
+  - `speed` (sound-off videos only) plays the range faster, for a pan or a
+    wait, instead of cutting it.
 - `notes`: on-screen notes (rule 33). Two lines at most, broken with `\n`.
+  - `top` places it anywhere (0.42 is front and centre);
+  - `capMax` makes it bigger (up to 0.08);
+  - `hideHeadline: true` takes the headline off while it shows;
+  - `align: "left"` sets a list flush left.
 - `overlays`:
   - `file` is absolute, or relative to the work folder;
   - `mode` is `card` (a screenshot in the upper frame) or `full` (fills the
     frame);
-  - `top` moves a card down.
+  - `top` moves a card down;
+  - `from` starts a recording at its own second, and `speed` plays it faster
+    (at most 2, rule 50).
 - `screens`: ranges where the clip itself shows a screen, so the headline
   steps aside.
 - `blurs`: parts of a filmed screen that fail the privacy check (rule 37).

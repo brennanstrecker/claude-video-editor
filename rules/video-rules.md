@@ -327,12 +327,81 @@ rewritten, so the same note never has to be given twice.
       clicks or signups. The caption shape that brings the best results
       becomes the default.
 
+## Notes rounds, listening, recordings and screen videos
+
+47. **A notes round changes only what you asked, and every moved cut is heard
+    whole.**
+    - **Only your notes are built.** Anything else the checks turn up is put
+      to you as a proposal, with its range, and not cut.
+    - **A cut point that a note moves is found again,** never reused from an
+      earlier plan. Use the level profile, and hear the last word on its own
+      with three models. The cut goes at the quietest point after the last
+      good word, before the next one starts.
+    - **"Captions X, heard part of X" at a cut is real** until the cut is
+      heard whole.
+    - **Each new version goes next to the one before,** as "<HEADLINE> (v1)",
+      so you can compare.
+48. **Every kept sound block is heard on its own.**
+    - **Why:** the whole-video pass and the 8 s chunks both smooth over a
+      short false start inside a kept line ("tool, to c... to complete"
+      sounds like "tool to complete"). Heard alone, a stutter comes out as
+      words that aren't in the line.
+    - **The step:** after every build, `python3 edit/blocks.py <slug>` hears
+      each voice block inside each kept piece with `whisper.blockModel`. A
+      block whose words aren't the line's words is cut, or explained in the
+      plan. Whisper often mangles a short block's real words, so hear a
+      doubtful one again before cutting.
+    - **Word times can drift by 2 s** in a long, paused clip, so cut points
+      come from the voice blocks and the level profile, never from the
+      transcript's word times alone.
+49. **Hold the line on a repeat.** A feature or idea named twice in one list
+    goes, even when the second wording is livelier. Say it once, in the
+    fuller version.
+50. **A screen recording shows what you're saying, while you say it, at a
+    pace that keeps attention.**
+    - **When you explain what your product does,** recordings can play back
+      to back, one per feature, each from the word that names it to the next
+      one's. They replace rule 36's one-every-15-seconds limit for that
+      stretch.
+    - **Match:** each recording starts on the word that names its feature,
+      and shows that feature's moment, not the lead-up. Skip waits with
+      `"from"` (the recording's own seconds).
+    - **Pace:** play a slow moment faster (`"speed"`, usually 1.25 to 2), but
+      never so fast that text can't be read as a shape: at most 2x, or 1.5x
+      over text you name. A scroll lands and holds for at least 0.7 s.
+    - **One idea per recording.** Three features in one breath means three
+      short recordings, not one long tour.
+    - **A note never sits over a recording;** it plays on your face.
+51. **The screen video: a phone filming a screen, with no face and no
+    voice.** For example, a laptop in a lecture while you type one prompt
+    into an app. It's easy to repeat every day.
+    - **The sound is off** (`"sound": "off"`): the room is other people. The
+      build keeps each range whole, makes no captions and writes a silent
+      track. You add a sound in the app. `check.mjs` skips the speech checks
+      and fails anything audible.
+    - **No cuts by default:** the whole clip plays. If a wait drags, speed it
+      up (`"speed": 3` on a keep range, sound-off only), or cut where the
+      frames on both sides match most closely. Only if you ask.
+    - **The hook is the prompt itself, in quotes, as the headline** from frame
+      1. A long hook in your exact words can fill up to 86% of the width
+      (`"fill": 0.86`) to keep its capitals at the minimum size. Headline
+      lines are never re-wrapped.
+    - **One short line near the end, front and centre:** a note with `"top"`
+      (about 0.42), a bigger `"capMax"` (up to 0.08), and `"hideHeadline":
+      true`, so it has the screen to itself. One line, not a list: there's
+      little time to read. A list, if you want one, is `"align": "left"`.
+    - **Film the screen only:** never other people's faces, names, screens or
+      voices. Blur anything private (`"blurs"`) when you ask for it.
+    - **Truth:** an overclaim on screen is flagged to you once (rule 40), and
+      your answer stands.
+
 ## Output and checks
 
 - **Format:** 1080x1920 at 30 fps, H.264 with AAC, standard colour.
 - **Audio:** your own audio, levelled to -14 LUFS, with no music.
 - **Where it goes:** `<Ready folder>/<HEADLINE>.mp4`, plus a cover frame.
-- **Checked before you see it** (`node edit/check.mjs <slug>`):
+- **Checked before you see it** (`node edit/check.mjs <slug>`, then
+  `python3 edit/blocks.py <slug>`, rule 48):
   - every cut boundary has no clipped word and no pop;
   - no leftover retake, breath, click or false start;
   - the captions match the finished sound: the video is transcribed again,

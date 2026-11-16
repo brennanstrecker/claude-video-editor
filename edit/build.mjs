@@ -129,11 +129,24 @@ function onset(clip, b) {
   return s && s[0] < b && s[0] >= b - 0.15 ? s[0] : b;
 }
 
+// Rule 51: a screen video ("sound": "off"), such as a phone filming a laptop
+// in a lecture. The room's sound is other people, so it is never used: each
+// range is kept whole (no pause cuts), nothing is captioned, and the sound
+// track is silent. A sound is added in the app when posting.
+const SOUND_OFF = plan.sound === 'off';
 const pieces = [];
 const dropped = [];
 for (const k of plan.keep) {
   const clip = clipBy[k.clip];
   if (!clip) throw new Error(`plan names ${k.clip}, which is not in ${inv.group}`);
+  // A range can play faster ("speed": 3) in a sound-off video only: a pan or
+  // a wait, sped up instead of cut. Speech never is.
+  if (k.speed && !SOUND_OFF) throw new Error('"speed" on a keep range needs "sound": "off"');
+  if (SOUND_OFF) {
+    pieces.push({ clip: k.clip, in: Math.max(0, Math.floor(k.from * FPS) / FPS),
+      out: Math.min(clip.duration, Math.ceil(Math.min(k.to, clip.duration) * FPS) / FPS), words: [], speed: k.speed || 1 });
+    continue;
+  }
   // Rule 12: the video's first word gets LEAD_IN of room tone before it, so
   // it is heard whole. The range may start that much earlier, over room tone
   // only.
@@ -200,7 +213,7 @@ for (const k of plan.keep) {
 // Two pieces of one clip that touch become one.
 for (let i = pieces.length - 1; i > 0; i--) {
   const a = pieces[i - 1]; const b = pieces[i];
-  if (a.clip === b.clip && b.in <= a.out + 1 / FPS) {
+  if (a.clip === b.clip && b.in <= a.out + 1 / FPS && (a.speed || 1) === (b.speed || 1)) {
     a.out = Math.max(a.out, b.out); a.words.push(...b.words); pieces.splice(i, 1);
   }
 }
@@ -209,9 +222,9 @@ for (let i = pieces.length - 1; i > 0; i--) {
 const last = pieces[pieces.length - 1];
 const lastDur = clipBy[last.clip].duration;
 const after = silences(last.clip).find(([a, b]) => a <= last.out + 0.02 && (b ?? lastDur) > last.out);
-if (after) last.out = Math.min(lastDur, (after[1] ?? lastDur) - PAD_IN, Math.ceil((last.out + TAIL) * FPS) / FPS);
+if (after && !SOUND_OFF) last.out = Math.min(lastDur, (after[1] ?? lastDur) - PAD_IN, Math.ceil((last.out + TAIL) * FPS) / FPS);
 // Rule 12, for check.mjs: how much room tone comes before the first voice.
-const firstSound = (() => {
+const firstSound = SOUND_OFF ? undefined : (() => {
   const { db, room } = levels(pieces[0].clip);
   let i = Math.ceil(pieces[0].in * 100);
   while (i < db.length && db[i] <= room + 9) i++;
@@ -220,14 +233,14 @@ const firstSound = (() => {
 
 let t = 0;
 for (const p of pieces) {
-  p.frames = Math.round((p.out - p.in) * FPS);
+  p.frames = Math.round(((p.out - p.in) * FPS) / (p.speed || 1));
   p.outStart = t; t += p.frames / FPS; p.outEnd = t;
 }
 const total = t;
 const toOut = (clip, s) => {
   const p = pieces.find((q) => q.clip === clip && s < q.out);
   if (!p) return null;
-  return p.outStart + Math.max(0, s - p.in);
+  return p.outStart + Math.max(0, s - p.in) / (p.speed || 1);
 };
 
 // ---- 2. measurements: chin and background brightness ---------------------
@@ -355,8 +368,10 @@ const notes = (C.notes.on ? plan.notes || [] : []).map((n) => {
   const to = toOut(n.clip, n.to);
   if (start === null || to === null) throw new Error(`note at ${n.clip} ${n.from}-${n.to}s is not in a kept piece`);
   const piece = pieces.find((p) => p.outEnd > start);
-  const y = piece.capTop < 0.3 ? piece.capTop + 0.055 : HEADLINE_Y;
-  const mid = piece.in + (start - piece.outStart);
+  // Rule 51: a note can sit where the plan puts it ("top"), and then the
+  // headline stays unless the note says "hideHeadline".
+  const y = n.top ?? (piece.capTop < 0.3 ? piece.capTop + 0.055 : HEADLINE_Y);
+  const mid = piece.in + (start - piece.outStart) * (piece.speed || 1);
   return { ...n, start, end: Math.min(total, Math.max(to, start + NOTE.min)), y, border: brightness(piece.clip, mid, y, y + 0.1) > LIGHT };
 });
 // Rule 27: a screen in the frame takes the headline off. Overlays count, and
@@ -365,7 +380,7 @@ const notes = (C.notes.on ? plan.notes || [] : []).map((n) => {
 const screens = [
   ...overlays.map((o) => [o.start, o.end]),
   ...(plan.screens || []).map((s) => [toOut(s.clip, s.from), toOut(s.clip, s.to)]),
-  ...notes.filter((n) => n.y === HEADLINE_Y).map((n) => [n.start, n.end]),
+  ...notes.filter((n) => n.y === HEADLINE_Y || n.hideHeadline).map((n) => [n.start, n.end]),
 ];
 const endingFrom = plan.ending ? Math.max(0, total - (plan.ending.seconds || 2.5)) : total;
 
@@ -386,9 +401,11 @@ function measure(text) {
   return JSON.parse(r.stdout.toString());
 }
 /** Rule 26 in numbers: the font size for a headline or ending text. */
-function headSize(text) {
+function headSize(text, fill = HEAD.fill) {
   const m = measure(text);
-  const fit = (HEAD.fill * W * m.cellUnits) / Math.max(...m.lines);
+  // A long hook kept word for word can fill a little wider ("fill" in the
+  // plan's headline, at most 0.86) so its capitals stay at the minimum.
+  const fit = (Math.min(fill, 0.86) * W * m.cellUnits) / Math.max(...m.lines);
   const byCap = (pct) => (pct * W * m.cellUnits) / m.capUnits;
   // Rule 26: when the first scene's captions sit just under the headline
   // (rule 31), the headline also ends above them: each line takes about 1.2
@@ -400,15 +417,23 @@ function headSize(text) {
   if (capPct < HEAD.capMin) console.warn(`"${text}" is too long for rule 26 (capitals ${(capPct * 100).toFixed(1)}% of width): reword it or split the line`);
   return { size, capPct };
 }
-const headFit = HEADLINE_ON ? headSize(plan.headline.text) : null;
+const headFit = HEADLINE_ON ? headSize(plan.headline.text, plan.headline.fill) : null;
 const endFit = plan.ending ? headSize(plan.ending.text) : null;
 
 /** A note's font size: its longest line fills NOTE.fill of the width, capped. */
-function noteSize(text) {
+function noteSize(text, capMax = NOTE.capMax) {
   const m = measure(text);
-  return Math.round(Math.min((NOTE.fill * W * m.cellUnits) / Math.max(...m.lines), (NOTE.capMax * W * m.cellUnits) / m.capUnits));
+  return Math.round(Math.min((NOTE.fill * W * m.cellUnits) / Math.max(...m.lines), (capMax * W * m.cellUnits) / m.capUnits));
 }
-for (const n of notes) n.size = noteSize(n.text);
+for (const n of notes) {
+  // A note may set its own "capMax" (a hook-sized line), and a list
+  // ("align": "left") is set flush left as one centred block.
+  n.size = noteSize(n.text, n.capMax);
+  if (n.align === 'left') {
+    const m = measure(n.text);
+    n.width = Math.round((Math.max(...m.lines) * n.size) / m.cellUnits);
+  }
+}
 
 // ---- 5. the text file (ASS: plain text, no animation) --------------------
 
@@ -427,7 +452,7 @@ const ass = [
   '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
 ];
 const head = (a, b, text, fit, border) =>
-  ass.push(`Dialogue: 1,${ts(a)},${ts(b)},Headline,,0,0,0,,{\\an8\\pos(${W / 2},${Math.round(HEADLINE_Y * H)})\\fs${fit.size}${border ? `\\bord${Math.round(fit.size / 22)}` : ''}}${esc(text)}`);
+  ass.push(`Dialogue: 1,${ts(a)},${ts(b)},Headline,,0,0,0,,{\\an8\\q2\\pos(${W / 2},${Math.round(HEADLINE_Y * H)})\\fs${fit.size}${border ? `\\bord${Math.round(fit.size / 22)}` : ''}}${esc(text)}`);
 for (const [a, b] of headSpans) head(a, b, plan.headline.text, headFit, headBorder);
 if (plan.ending) head(endingFrom, total, plan.ending.text, endFit, headBorder);
 if (C.captions.on) {
@@ -440,7 +465,8 @@ if (C.captions.on) {
 for (const n of notes) {
   // \q2: the plan's own line breaks only. The caption style's margins would
   // wrap a note's 86%-wide line into three.
-  ass.push(`Dialogue: 1,${ts(n.start)},${ts(n.end)},Caption,,0,0,0,,{\\an8\\q2\\pos(${W / 2},${Math.round(n.y * H)})\\fs${n.size}${n.border ? `\\bord${Math.round(n.size / 18)}` : ''}}${esc(n.text)}`);
+  const at = n.align === 'left' ? `\\an7\\q2\\pos(${Math.round((W - n.width) / 2)},${Math.round(n.y * H)})` : `\\an8\\q2\\pos(${W / 2},${Math.round(n.y * H)})`;
+  ass.push(`Dialogue: 1,${ts(n.start)},${ts(n.end)},Caption,,0,0,0,,{${at}\\fs${n.size}${n.border ? `\\bord${Math.round(n.size / 18)}` : ''}}${esc(n.text)}`);
 }
 writeFileSync(join(work, 'text.ass'), ass.join('\n') + '\n');
 
@@ -463,7 +489,7 @@ pieces.forEach((p, i) => {
   const blur = (plan.blurs || []).filter((b) => b.clip === p.clip && b.from < p.out && b.to > p.in).map((b, n) => {
     const [x, y, w, h] = [b.x * W, b.y * H, b.w * W, b.h * H].map(Math.round);
     return `,split=2[m${n}][b${n}];[b${n}]crop=${w}:${h}:${x}:${y},boxblur=${C.blur.radius}:${C.blur.power}[bl${n}];` +
-      `[m${n}][bl${n}]overlay=${x}:${y}:enable='between(t,${(b.from - p.in).toFixed(3)},${(b.to - p.in).toFixed(3)})'`;
+      `[m${n}][bl${n}]overlay=${x}:${y}:enable='between(t,${((b.from - p.in) / (p.speed || 1)).toFixed(3)},${((b.to - p.in) / (p.speed || 1)).toFixed(3)})'`;
   }).join('');
   ff(['-ss', p.in.toFixed(4), '-i', fileUrl(picture[p.clip]), '-ss', p.in.toFixed(4), '-i', fileUrl(clipBy[p.clip].file),
     '-t', dur.toFixed(4), '-map', '0:v:0', '-map', '1:a:0',
@@ -471,10 +497,10 @@ pieces.forEach((p, i) => {
     // phone clip's frames can sit half a frame off the cut point; without
     // this the fps filter dropped the first frame, and each such piece pushed
     // the rest of the video about a frame late.
-    '-vf', `setpts=PTS-STARTPTS,fps=${FPS},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1` +
+    '-vf', `setpts=(PTS-STARTPTS)/${p.speed || 1},fps=${FPS},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1` +
       `${blur},tpad=stop_mode=clone:stop_duration=1`,
     '-af', `asetpts=PTS-STARTPTS,aresample=48000,apad,atrim=0:${dur.toFixed(4)},afade=t=in:d=0.03,` +
-      `afade=t=out:st=${Math.max(0, dur - 0.03).toFixed(4)}:d=0.03`,
+      `afade=t=out:st=${Math.max(0, dur - 0.03).toFixed(4)}:d=0.03${SOUND_OFF ? ',volume=0' : ''}`,
     '-frames:v', String(p.frames),
     '-c:v', 'libx264', '-crf', '14', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', ...BT709,
     '-c:a', 'pcm_s16le', '-ac', '2', '-y', out]);
@@ -484,7 +510,7 @@ writeFileSync(join(work, 'pieces.txt'), list.join('\n') + '\n');
 
 // Loudness, pass 1: measure.
 const LOUD = `loudnorm=I=${C.loudness.lufs}:TP=${C.loudness.truePeak}:LRA=11`;
-const meas = ff(['-f', 'concat', '-safe', '0', '-i', join(work, 'pieces.txt'), '-vn',
+const meas = SOUND_OFF ? '{}' : ff(['-f', 'concat', '-safe', '0', '-i', join(work, 'pieces.txt'), '-vn',
   '-af', `${LOUD}:print_format=json`, '-f', 'null', '-'], { quiet: false });
 const m = JSON.parse(meas.slice(meas.lastIndexOf('{'), meas.lastIndexOf('}') + 1));
 
@@ -494,7 +520,11 @@ overlays.forEach((o, i) => {
   // Overlay paths are absolute, or relative to the work folder.
   const file = isAbsolute(o.file) ? o.file : join(WORK, o.file);
   const isImage = /\.(png|jpe?g|webp)$/i.test(file);
-  inputs.push(...(isImage ? ['-loop', '1', '-t', String(o.dur)] : ['-ss', String(o.from || 0), '-t', String(o.dur)]), '-i', fileUrl(file));
+  // Rule 50: a recording starts at the moment that matches the words ("from",
+  // in its own seconds) and can play faster ("speed") to keep pace. "dur"
+  // stays the time it is on screen.
+  const speed = isImage ? 1 : (o.speed || 1);
+  inputs.push(...(isImage ? ['-loop', '1', '-t', String(o.dur)] : ['-ss', String(o.from || 0), '-t', String(o.dur * speed)]), '-i', fileUrl(file));
   const src = probe(file);
   const box = src.width > src.height ? CARD.wide : CARD.tall;
   // A card gets a thin dark edge so a light screen doesn't melt into a light wall.
@@ -504,11 +534,11 @@ overlays.forEach((o, i) => {
       'format=rgba,pad=iw+6:ih+6:3:3:color=black@0.35';
   // A card starts lower ("top" in the plan) where the captions sit at the top.
   const y = o.mode === 'full' ? 0 : Math.round((o.top ?? CARD.top) * H);
-  vchain += `;[${i + 1}:v]${fit},setsar=1,fps=${FPS},setpts=PTS-STARTPTS+${o.start.toFixed(3)}/TB[o${i}]` +
+  vchain += `;[${i + 1}:v]${fit},setsar=1,setpts=(PTS-STARTPTS)/${speed},fps=${FPS},setpts=PTS-STARTPTS+${o.start.toFixed(3)}/TB[o${i}]` +
     `;[v${i}][o${i}]overlay=x=(W-w)/2:y=${y}:eof_action=pass:enable='between(t,${o.start.toFixed(3)},${o.end.toFixed(3)})'[v${i + 1}]`;
 });
 vchain += `;[v${overlays.length}]ass=filename=${join(work, 'text.ass')}:fontsdir=${FONTS}[v]`;
-const achain = `[0:a]${LOUD}:measured_I=${m.input_i}:measured_TP=${m.input_tp}:` +
+const achain = SOUND_OFF ? '[0:a]aresample=48000[a]' : `[0:a]${LOUD}:measured_I=${m.input_i}:measured_TP=${m.input_tp}:` +
   `measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:linear=true,aresample=48000[a]`;
 
 // The headline as a file name, minus characters Finder dislikes and a closing
@@ -528,7 +558,7 @@ const cover = outFile.replace(/\.mp4$/, '-cover.jpg');
 ff(['-i', fileUrl(outFile), '-frames:v', '1', '-q:v', '2', '-y', fileUrl(cover)]);
 
 writeFileSync(join(work, 'timeline.json'), JSON.stringify({
-  slug, type: plan.type, output: outFile, total, firstWord: captions[0]?.start ?? null, firstSound,
+  slug, type: plan.type, sound: SOUND_OFF ? 'off' : 'on', output: outFile, total, firstWord: captions[0]?.start ?? null, firstSound,
   captionsOn: C.captions.on,
   headline: HEADLINE_ON ? {
     text: plan.headline.text, spans: headSpans, border: headBorder, size: headFit.size, capPct: headFit.capPct,
